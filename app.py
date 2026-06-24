@@ -4,8 +4,7 @@ import base64
 import os
 import sys
 
-# Add src to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
+
 
 from src.main import load_config, get_recommendations, setup_logging
 from src.input_handler import InputValidationError
