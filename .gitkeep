@@ -1,0 +1,4 @@
+# output/
+# Stores the last LLM response saved to disk by OutputRenderer.
+# File: last_response.txt (generated at runtime)
+# Excluded from version control via .gitignore.

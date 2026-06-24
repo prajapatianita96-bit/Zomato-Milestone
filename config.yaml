@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────────────────
+# config.yaml — Central configuration for the Zomato AI system
+# ─────────────────────────────────────────────────────────────────
+
+# ── LLM Settings ──────────────────────────────────────────────────
+llm:
+  provider: groq                      # "groq"
+  model: llama-3.1-8b-instant         # Model name
+  temperature: 0.4                    # 0 = deterministic, 1 = creative
+  max_tokens: 1024                    # Max output tokens per response
+  retry_limit: 3                      # Number of retries on API failure
+  request_timeout: 30                 # Timeout in seconds per API call
+
+# ── Dataset Settings ──────────────────────────────────────────────
+dataset:
+  source: ManikaSaini/zomato-restaurant-recommendation
+  cache_path: data/zomato_dataset.pkl
+  cache_ttl_hours: 24                 # Reload from HF if cache older than this
+  max_filter_results: 20              # Hard cap on filter results sent to LLM
+  min_result_threshold: 5             # Trigger fallback relaxation below this count
+
+# ── Budget Tier Mapping (cost_for_two in INR) ─────────────────────
+budget_tiers:
+  low:
+    min: 0
+    max: 500
+  medium:
+    min: 501
+    max: 1200
+  high:
+    min: 1201
+    max: 99999
+
+# ── Budget Synonyms (InputHandler normalization) ──────────────────
+budget_synonyms:
+  low:    ["cheap", "affordable", "budget", "inexpensive", "economy"]
+  medium: ["moderate", "mid", "average", "standard", "mid-range"]
+  high:   ["expensive", "luxury", "premium", "fine dining", "upscale"]
+
+# ── Input Validation ──────────────────────────────────────────────
+input:
+  max_extra_preferences_length: 200   # Characters allowed for extra preferences
+  rating_min: 0.0
+  rating_max: 5.0
+  default_rating: 3.0
+  default_budget: medium
+  fuzzy_match_cutoff: 0.6             # Minimum score for location/cuisine match
+
+# ── Prompt Builder Settings ───────────────────────────────────────
+prompt:
+  max_prompt_tokens: 3000             # Trim restaurant list if exceeded
+  token_estimate_divisor: 4           # len(text) // divisor = estimated tokens
+  max_restaurants_in_prompt: 10       # Trimmed list size when over token limit
+
+# ── Output Renderer Settings ──────────────────────────────────────
+output:
+  max_display_chars: 1500             # Truncate LLM response beyond this
+  max_restaurant_name_length: 40      # Truncate long names in display
+  save_response_path: output/last_response.txt
+
+# ── Logging ───────────────────────────────────────────────────────
+logging:
+  level: INFO                         # DEBUG / INFO / WARNING / ERROR
+  log_to_file: false
+  log_file_path: logs/app.log
