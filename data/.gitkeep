@@ -1,0 +1,8 @@
+# data/
+# This directory stores the cached preprocessed Zomato dataset.
+#
+# Files:
+#   zomato_dataset.pkl   — Generated automatically on first run of DataLoader
+#
+# NOTE: .pkl files are excluded from version control via .gitignore
+#       to avoid committing large binary data files.

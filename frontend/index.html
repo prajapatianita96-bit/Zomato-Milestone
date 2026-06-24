@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zomato AI Recommendations</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- React & ReactDOM (UMD via CDN) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel standalone for in-browser JSX compilation -->
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div class="background-mesh"></div>
+    <div id="root"></div>
+
+    <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            var string = msg.toLowerCase();
+            var substring = "script error";
+            if (string.indexOf(substring) > -1){
+                alert('Script Error: See Browser Console for Detail');
+            } else {
+                var message = [
+                    'Message: ' + msg,
+                    'URL: ' + url,
+                    'Line: ' + lineNo,
+                    'Column: ' + columnNo,
+                    'Error object: ' + JSON.stringify(error)
+                ].join(' - ');
+                document.getElementById('root').innerHTML = '<div style="color:red; padding:20px; background:black;">' + message + '</div>';
+            }
+            return false;
+        };
+
+        // Force Babel to use classic JSX transform
+        if (typeof Babel !== 'undefined') {
+            Babel.registerPreset('react-classic', {
+                presets: [
+                    [Babel.availablePresets['react'], { runtime: 'classic' }]
+                ]
+            });
+        }
+    </script>
+    <script type="text/babel" data-presets="react-classic,env">
+        
+        const { useState, useEffect } = React;
+
+        const API_BASE = window.location.port === '8000' ? '' : 'http://localhost:8000';
+
+        function Header() {
+            return (
+                <header>
+                    <h1>Zomato <span>AI</span></h1>
+                    <p>Discover your next favorite meal through the power of AI</p>
+                </header>
+            );
+        }
+
+        function PreferenceForm({ onSearch, isLoading }) {
+            const [locations, setLocations] = useState([]);
+            const [formData, setFormData] = useState({
+                location: '',
+                budget: 'medium',
+                cuisine: '',
+                min_rating: 4.0,
+                extra_preferences: ''
+            });
+
+            useEffect(() => {
+                const fetchLocations = async () => {
+                    try {
+                        const res = await fetch(`${API_BASE}/locations`);
+                        const result = await res.json();
+                        if (result.status === "success") {
+                            setLocations(result.data);
+                        }
+                    } catch (err) {
+                        console.error("Failed to fetch locations", err);
+                    }
+                };
+                fetchLocations();
+            }, []);
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onSearch(formData);
+            };
+
+            return (
+                <aside className="sidebar glass-panel">
+                    <h2>Preferences</h2>
+                    <form onSubmit={handleSubmit}>
+                        <div className="form-group">
+                            <label htmlFor="location">Location</label>
+                            <select id="location" name="location" required value={formData.location} onChange={handleChange}>
+                                <option value="" disabled>Select a location</option>
+                                {locations.map(loc => (
+                                    <option key={loc} value={loc}>
+                                        {loc.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="form-group">
+                            <label htmlFor="budget">Budget</label>
+                            <select id="budget" name="budget" required value={formData.budget} onChange={handleChange}>
+                                <option value="low">Low (₹0 - ₹500)</option>
+                                <option value="medium">Medium (₹501 - ₹1200)</option>
+                                <option value="high">High (₹1201+)</option>
+                            </select>
+                        </div>
+
+                        <div className="form-group">
+                            <label htmlFor="cuisine">Cuisine</label>
+                            <div style={{ position: 'relative' }}>
+                                <span style={{ position: 'absolute', left: '12px', top: '12px', opacity: 0.5 }}>🔍</span>
+                                <input type="text" id="cuisine" name="cuisine" placeholder="e.g. North Indian" required value={formData.cuisine} onChange={handleChange} style={{ paddingLeft: '40px' }} />
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label htmlFor="min_rating">Minimum Rating</label>
+                            <div className="slider-container">
+                                <input type="range" id="min_rating" name="min_rating" min="0" max="5" step="0.1" value={formData.min_rating} onChange={handleChange} />
+                                <span id="rating-val">{parseFloat(formData.min_rating).toFixed(1)}</span>
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label htmlFor="extra_preferences">Extra Preferences (Optional)</label>
+                            <textarea id="extra_preferences" name="extra_preferences" placeholder="e.g. family friendly, rooftop seating..." value={formData.extra_preferences} onChange={handleChange} />
+                        </div>
+
+                        <button type="submit" className="submit-btn" disabled={isLoading}>
+                            <span>{isLoading ? 'Analyzing...' : 'Find Restaurants'}</span>
+                            {isLoading && <div className="spinner"></div>}
+                        </button>
+                    </form>
+                </aside>
+            );
+        }
+
+        function RestaurantImage({ initialSrc, name }) {
+            const fallbackUrl = 'https://images.unsplash.com/photo-1493770348161-369560ae357d?w=800&q=80&auto=format&fit=crop';
+            const [src, setSrc] = useState(initialSrc);
+            
+            // If the search results change and we get a new initialSrc, reset the state
+            useEffect(() => {
+                setSrc(initialSrc);
+            }, [initialSrc]);
+
+            return (
+                <img 
+                    src={src} 
+                    alt={`Food from ${name}`} 
+                    className="card-image" 
+                    onError={() => {
+                        // If the current image fails, swap to the guaranteed fallback
+                        if (src !== fallbackUrl) {
+                            setSrc(fallbackUrl);
+                        }
+                    }}
+                />
+            );
+        }
+
+        function RestaurantCard({ restaurant, index }) {
+            const name = restaurant.name || 'Unknown Restaurant';
+            const rating = restaurant.rating || restaurant.aggregate_rating || 'N/A';
+            const cuisine = restaurant.cuisine || restaurant.cuisines || 'Various';
+            const cost = restaurant.cost || (restaurant.cost_for_two ? `₹${restaurant.cost_for_two} for two` : 'N/A');
+            const explanation = restaurant.explanation || 'No explanation provided by AI.';
+            
+            // Map cuisines to arrays of ultra-high-quality, moody Unsplash images
+            const hdImages = {
+                'north indian': [
+                    'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1631515243349-e0cb75fb8d3a?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1610067056496-6e54252e69de?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=800&q=80&auto=format&fit=crop'
+                ],
+                'south indian': [
+                    'https://images.unsplash.com/photo-1610190203036-70138e6ff56f?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1589301760014-d929f39ce9b1?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=800&q=80&auto=format&fit=crop'
+                ],
+                'chinese': [
+                    'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1525755662778-989d0524087e?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1552611052-33e04de081de?w=800&q=80&auto=format&fit=crop'
+                ],
+                'italian': [
+                    'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1473093295043-cdd812d0e601?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1598866594230-a701cdd6eb6a?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1608219992759-8d74ed8d76eb?w=800&q=80&auto=format&fit=crop'
+                ],
+                'pizza': [
+                    'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1590947132387-155cc02f3212?w=800&q=80&auto=format&fit=crop'
+                ],
+                'burger': [
+                    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=800&q=80&auto=format&fit=crop'
+                ],
+                'fast food': [
+                    'https://images.unsplash.com/photo-1610440042657-612c34d95e9f?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1562059390-a761a084768e?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1551582045-6c7e10fa4e12?w=800&q=80&auto=format&fit=crop'
+                ],
+                'desserts': [
+                    'https://images.unsplash.com/photo-1551024506-0cb9a4748cb8?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=800&q=80&auto=format&fit=crop'
+                ],
+                'beverages': [
+                    'https://images.unsplash.com/photo-1536935338788-846bb9981813?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=800&q=80&auto=format&fit=crop'
+                ],
+                'cafe': [
+                    'https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?w=800&q=80&auto=format&fit=crop'
+                ],
+                'mughlai': [
+                    'https://images.unsplash.com/photo-1544025162-8111f42d2a45?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1603360946369-dc9bb6258143?w=800&q=80&auto=format&fit=crop'
+                ],
+                'biryani': [
+                    'https://images.unsplash.com/photo-1631515243349-e0cb75fb8d3a?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1589302168068-964664d93cb0?w=800&q=80&auto=format&fit=crop'
+                ],
+                'healthy': [
+                    'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&q=80&auto=format&fit=crop'
+                ],
+                'japanese': [
+                    'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1553621042-f6e147245754?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1617196034796-73dfa7b1fd56?w=800&q=80&auto=format&fit=crop'
+                ],
+                'mexican': [
+                    'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&q=80&auto=format&fit=crop',
+                    'https://images.unsplash.com/photo-1624300629298-e9ad39c56bad?w=800&q=80&auto=format&fit=crop'
+                ]
+            };
+            
+            const primaryCuisine = cuisine.split(',')[0].trim().toLowerCase();
+            const defaultImages = [
+                'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1414235077428-338988a2e8c0?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1493770348161-369560ae357d?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1544025162-8111f42d2a45?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=800&q=80&auto=format&fit=crop',
+                'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=800&q=80&auto=format&fit=crop'
+            ];
+            
+            // Use the array index directly to ensure 100% unique sequential selection 
+            const pickIndex = typeof index === 'number' ? index : 0;
+            
+            const cuisineGroup = hdImages[primaryCuisine];
+            const imageUrl = cuisineGroup 
+                ? cuisineGroup[pickIndex % cuisineGroup.length] 
+                : defaultImages[pickIndex % defaultImages.length];
+
+            return (
+                <div className="glass-panel restaurant-card">
+                    <div className="card-image-container">
+                        <img 
+                            src={imageUrl} 
+                            alt={`Food from ${name}`} 
+                            className="card-image" 
+                            onError={(e) => {
+                                e.target.onerror = null; // Prevent infinite loop if fallback also fails
+                                e.target.src = 'https://images.unsplash.com/photo-1414235077428-338988a2e8c0?w=800&q=80&auto=format&fit=crop';
+                            }}
+                        />
+                        <div className="rating-overlay">
+                            {rating} ⭐
+                        </div>
+                    </div>
+                    <div className="card-body">
+                        <div className="card-header">
+                            <h3>{name}</h3>
+                        </div>
+                        <div className="card-subtitle">
+                            {cuisine} • {cost}
+                        </div>
+                        <div className="ai-explanation">
+                            <div className="ai-header">
+                                <span className="ai-pulse"></span>
+                                <strong>AI INSIGHT</strong>
+                            </div>
+                            <p>"{explanation}"</p>
+                        </div>
+                        <button className="reserve-btn">RESERVE TABLE</button>
+                    </div>
+                </div>
+            );
+        }
+
+        function EmptyState({ error }) {
+            if (error) {
+                return (
+                    <div className="glass-panel" style={{ borderColor: '#ef4444', color: '#ef4444' }}>
+                        <h3>⚠️ Error</h3>
+                        <p>{error}</p>
+                    </div>
+                );
+            }
+            return (
+                <div className="empty-state">
+                    <div className="icon">🍽️</div>
+                    <h3>Ready for recommendations</h3>
+                    <p>Enter your preferences on the left to get AI-ranked restaurant suggestions.</p>
+                </div>
+            );
+        }
+
+        function App() {
+            const [results, setResults] = useState(null);
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState(null);
+
+            const handleSearch = async (formData) => {
+                setIsLoading(true);
+                setError(null);
+                setResults(null);
+
+                try {
+                    const response = await fetch(`${API_BASE}/recommend`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ...formData,
+                            min_rating: parseFloat(formData.min_rating)
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errData = await response.json();
+                        throw new Error(errData.detail || 'Failed to fetch recommendations');
+                    }
+
+                    const result = await response.json();
+                    setResults(result.data);
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            return (
+                <main className="container">
+                    <Header />
+                    <div className="content-wrapper">
+                        <PreferenceForm onSearch={handleSearch} isLoading={isLoading} />
+                        
+                        <section className="results-area">
+                            {!results && !isLoading && <EmptyState error={error} />}
+                            
+                            {results && results.length === 0 && (
+                                <div className="glass-panel">
+                                    <h3>No results found</h3>
+                                    <p>Try relaxing your filters (e.g., lower rating or broader cuisine).</p>
+                                </div>
+                            )}
+
+                            {results && results.length > 0 && (
+                                <div className="results-container">
+                                    {results.map((r, idx) => (
+                                        <RestaurantCard key={idx} restaurant={r} index={idx} />
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+                    </div>
+                </main>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
